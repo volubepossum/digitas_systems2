@@ -37,7 +37,7 @@ module acc #(
 );
 
     genvar i;
-    localparam WAIT_LENGTH = 4;                          // should be at least 2, and odd
+    localparam WAIT_LENGTH = 5;                          // should be at least 2, and odd
     localparam MAX_ADDR    = ((WIDTH * HEIGHT) / 4) - 1; // number of registers for 1 frame
     localparam ROW_WIDTH   = WIDTH / 4;                  // number of registers for 1 row
 
@@ -58,7 +58,7 @@ module acc #(
     state_t state, state_next;
 
     logic read_ready, read_ready_next;  // signals are ready to be inputted to alu - dataR(abc)
-    logic [1:0] read_ready_buf;         // 2-stage buffer: read_ready_next -> buf[0] -> buf[1] (read_ready)
+    logic [2:0] read_ready_buf;         // 2-stage buffer: read_ready_next -> buf[0] -> buf[1] (read_ready)
     logic [$clog2(WAIT_LENGTH)-1: 0] wait_cnt, wait_next;                  
     logic [$clog2(HEIGHT)   -1:0] row_cnt, row_next;
     logic [$clog2(ROW_WIDTH)-1:0] col_cnt, col_next;
@@ -136,11 +136,11 @@ module acc #(
       end else begin
         state          <= state_next;
         wait_cnt       <= wait_next;
-        read_ready_buf <= { read_ready_buf[0], read_ready_next };
+        read_ready_buf <= {read_ready_buf[1], read_ready_buf[0], read_ready_next };
         // read_ready     <= read_ready_next;
       end
     end
-    assign read_ready = read_ready_buf[1];
+    assign read_ready = read_ready_buf[2];
 
 
     // input numbers to the alu

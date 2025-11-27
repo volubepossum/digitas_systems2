@@ -97,7 +97,7 @@ module uart #(
 
       RX_DATA: begin
         if (rx_sample_count == 4'd8) begin  // Sample in the middle of the bit
-          rx_shift_reg_next[rx_bit_index] = rx_sync_1;
+          rx_shift_reg_next = {rx_sync_1, rx_shift_reg[7:1]}; // todo: check if this is the correct order
           if (rx_bit_index == 3'd7) begin
             rx_state_next = RX_STOP;
           end else begin

@@ -16,6 +16,7 @@ module memory3 #(
     parameter ADDR_WIDTH = 16
 ) (
     input logic clk,
+    input logic rst,
     // port a
     input logic ena,
     input logic wea,
@@ -33,7 +34,8 @@ module memory3 #(
     logic [31:0] ram [2 ** ADDR_WIDTH];
 
     always_ff @(posedge clk) begin
-        if (ena) begin
+        if (rst) doa <= '0;
+        else if (ena) begin
             if (wea) begin
                 ram[addra] <= dia;
             end else begin
@@ -43,7 +45,8 @@ module memory3 #(
     end
 
     always_ff @(posedge clk) begin
-        if (enb) begin
+        if (rst) dob <= '0;
+        else if (enb) begin
             if (web) begin
                 ram[addrb] <= dib;
             end else begin

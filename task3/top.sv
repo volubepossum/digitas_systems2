@@ -21,7 +21,7 @@ module top (
     // Parameters
     // Clock: the clock will be 100MHz *  CLK_MULTIPLY_FACTOR / CLK_DIVISION_FACTOR.
     localparam int CLK_MULTIPLY_FACTOR = 8; // 2 - 16: 1.6 GHz physical limitation on feedback clock
-    localparam int CLK_DIVISION_FACTOR = 8; // 1 - 128
+    localparam int CLK_DIVISION_FACTOR = 4; // 1 - 128
 
     localparam int WIDTH  = 352;
     localparam int HEIGHT = 288;
@@ -160,6 +160,7 @@ module top (
     // Memory3 instance
     memory3 #(.ADDR_WIDTH(16)) memory3_inst_0 (
         .clk(clk),
+        .rst(rst_held),
         // Port a (accelerator)
         .ena(mem_ena),
         .wea(mem_wea),

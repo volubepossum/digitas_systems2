@@ -201,21 +201,27 @@ module controller #(
     endcase
   end
 
-  always_ff @(posedge clk) begin
+  always_ff @(posedge clk) begin // synch resets
     if (reset) begin
-      state            <= START;
       data_down_buffer <= 32'b0;
       data_up_buffer   <= 32'b0;
-      addr_count       <= '0;
+      // addr_count       <= '0;
       mem_en           <= 1'b0;
       mem_we           <= 1'b0;
     end else begin
-      state            <= state_next;
       data_down_buffer <= data_down_buffer_next;
       data_up_buffer   <= data_up_buffer_next;
       addr_count       <= addr_count_next;
       mem_en           <= mem_en_next;
       mem_we           <= mem_we_next;
+    end
+  end
+
+  always_ff @( posedge clk or posedge reset ) begin // async resets
+    if (reset) begin
+      state            <= START;
+    end else begin
+      state            <= state_next;
     end
   end
 
