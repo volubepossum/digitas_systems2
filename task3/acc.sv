@@ -48,8 +48,7 @@ module acc #(
     typedef enum {
         INIT, 
         FILL_FIFOS, 
-        READ_WAIT,
-        WRITE_WAIT, 
+        WAIT,
         READ, 
         WRITE,
         FIN
@@ -81,19 +80,19 @@ module acc #(
             FILL_FIFOS: begin
                 en = 1;
                 if (row_cached) begin
-                    state_next = READ_WAIT;
+                    state_next = WAIT;
                     read_ready_next = 1;
                 end else begin
                     state_next = FILL_FIFOS;
                 end
             end
-            READ_WAIT: begin
+            WAIT: begin
                 read_ready_next = 1;
                 en     = 1;
                 if (wait_cnt == WAIT_LENGTH - 1) begin
                     state_next = WRITE;
                 end else begin
-                    state_next = READ_WAIT;
+                    state_next = WAIT;
                     wait_next  = wait_cnt + 1;
                 end
             end
@@ -105,18 +104,8 @@ module acc #(
             WRITE: begin
                 en = 1;
                 we = 1;
-                if (row_cnt == HEIGHT && col_cnt == ROW_WIDTH -1) state_next = WRITE_WAIT;
+                if (row_cnt == HEIGHT && col_cnt == ROW_WIDTH -1) state_next = FIN;
                 else                                              state_next = READ;
-            end
-            WRITE_WAIT: begin
-                en = 1;
-                we = 1;
-                if (wait_cnt == WAIT_LENGTH - 1) begin
-                    state_next = FIN;
-                end else begin
-                    state_next = WRITE_WAIT;
-                    wait_next  = wait_cnt + 1;
-                end
             end
             FIN: begin
                 finish = 1'b1;
@@ -132,12 +121,10 @@ module acc #(
         state          <= INIT;
         wait_cnt       <= '0;
         read_ready_buf <= 2'b0;
-        // read_ready     <= 1'b0;
       end else begin
         state          <= state_next;
         wait_cnt       <= wait_next;
         read_ready_buf <= {read_ready_buf[1], read_ready_buf[0], read_ready_next };
-        // read_ready     <= read_ready_next;
       end
     end
     assign read_ready = read_ready_buf[2];
@@ -145,32 +132,6 @@ module acc #(
 
     // input numbers to the alu
     logic [31:0] alu_in_a, alu_in_b, alu_in_c;
-    
-    // always_comb begin : ASSIGN_ALU
-    //     case ({row_cnt == 0, row_cnt == HEIGHT-1})
-    //         2'b10: begin // top row 
-    //             alu_in_a = dataRb;
-    //             alu_in_b = dataRb;
-    //             alu_in_c = dataRc;
-    //         end
-    //         2'b00: begin // middle rows 
-    //             alu_in_a = dataRa;
-    //             alu_in_b = dataRb;
-    //             alu_in_c = dataRc;    
-    //         end
-    //         2'b01: begin // bottom row 
-    //             alu_in_a = dataRa;
-    //             alu_in_b = dataRb;
-    //             alu_in_c = dataRb;
-    //         end
-    //         default: begin
-    //             alu_in_a = dataRa;
-    //             alu_in_b = dataRb;
-    //             alu_in_c = dataRc; 
-    //         end
-    //     endcase
-    // end
-
     logic [31:0] alu_in_a_next, alu_in_b_next, alu_in_c_next;
 
     always_comb begin : ASSIGN_ALU
@@ -231,8 +192,7 @@ module acc #(
     endfunction
   
     // x derivative
-    logic [39:0] x_der, x_der_next;    
-    // assign x_der = '0;
+    logic [39:0] x_der, x_der_next;
     logic [49:0] x_der_pre_buff, x_der_pre_next;
 
     assign x_der_pre_next[49:40] = x_der_pre_buff[9:0];
@@ -289,21 +249,17 @@ module acc #(
             x_der            <= '0;
             x_der_pre_buff   <= '0;
             x_alus_ready     <= '0;
-            // x_alus_ready_buf <= '0;
         end else begin    
             if (x_alus_ready) begin
                 x_der          <= x_der_next;
                 x_der_pre_buff <= x_der_pre_next;
             end
-            // x_alus_ready_buf <= read_ready;
-            // x_alus_ready     <= x_alus_ready_buf;
             x_alus_ready <= read_ready;
         end
     end
 
     // y derivative
     logic [39:0] y_der, y_der_next;
-    // assign y_der = '0;
     // top (from in a) / bot (from in c) merged into one block to avoid duplication
     logic [39:0] y_alu_in_top_buff, y_alu_in_top_next;
     logic [47:0] y_alu_in_top;
@@ -312,9 +268,6 @@ module acc #(
     logic [39:0] y_alu_in_bot_buff, y_alu_in_bot_next;
     logic [47:0] y_alu_in_bot;
     logic [39:0] y_der_pre_bot;
-
-    // logic y_in_ready;
-
     always_comb begin
         // prepare next words
 
@@ -395,15 +348,12 @@ module acc #(
             y_der             <= 32'b0;
             y_alu_in_top_buff <= 40'b0;
             y_alu_in_bot_buff <= 40'b0;
-            // y_in_ready        <= 1'b0;
         end else begin
-            // if (y_in_ready) begin
             if (read_ready) begin
                 y_der             <= y_der_next;
                 y_alu_in_top_buff <= y_alu_in_top_next;
                 y_alu_in_bot_buff <= y_alu_in_bot_next;
             end 
-            // y_in_ready <= read_ready;
         end
         
     end
