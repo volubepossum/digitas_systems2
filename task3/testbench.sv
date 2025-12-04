@@ -94,7 +94,8 @@ module testbench;
         .di(dataW),
         .doa(dataRa),
         .dob(dataRb),
-        .doc(dataRc)
+        .doc(dataRc),
+        .finish(finish)
     );
 
     // Reset and start logic

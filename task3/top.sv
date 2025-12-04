@@ -154,7 +154,8 @@ module top (
         .doa(dataRa),
         .dob(dataRb),
         .doc(dataRc),
-        .row_cached(row_cached)
+        .row_cached(row_cached),
+        .finish(finish)
     );
 
     // Memory3 instance

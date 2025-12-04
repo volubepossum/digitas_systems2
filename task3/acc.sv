@@ -48,6 +48,7 @@ module acc #(
         INIT, 
         FILL_FIFOS, 
         WAIT,
+        WRITE0,
         READ, 
         WRITE,
         FIN
@@ -89,11 +90,16 @@ module acc #(
                 read_ready_next = 1;
                 en     = 1;
                 if (wait_cnt == WAIT_LENGTH - 1) begin
-                    state_next = WRITE;
+                    state_next = WRITE0;
                 end else begin
                     state_next = WAIT;
                     wait_next  = wait_cnt + 1;
                 end
+            end
+            WRITE0: begin
+                en = 1;
+                we = 1;
+                state_next = WRITE;
             end
             READ: begin
                 en = 1;

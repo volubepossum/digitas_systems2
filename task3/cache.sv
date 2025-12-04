@@ -24,11 +24,13 @@ module cache #(
     output logic        row_cached, // if there is one row cached
     output logic [31:0] doa, // fifo a read, cached output
     output logic [31:0] dob, // fifo b read, cached output
-    output logic [31:0] doc  // memory read, current output
+    output logic [31:0] doc,  // memory read, current output
+
+    input  logic        finish // finish signal. addresses are to be reset, new operation will make sure that everything else isn't corrupted
 );
 
-    localparam MAX_ADDR  = ((WIDTH * HEIGHT) / 4) - 1; // number of registers for 1 frame
-    localparam ROW_WIDTH = WIDTH / 4;                  // number of registers for 1 row
+    localparam MAX_ADDR  = ((WIDTH * HEIGHT) / 4); // number of registers for 1 frame
+    localparam ROW_WIDTH = WIDTH / 4;              // number of registers for 1 row
 
     logic [31:0] mem_do_reorder;
     logic [31:0] doc_buf;
@@ -97,7 +99,7 @@ module cache #(
         end
     end
     always_ff @(posedge clk or posedge rst) begin
-        if (rst) begin
+        if (rst | finish) begin
             addr_r_cnt <= '0;
             addr_w_cnt <= MAX_ADDR;
             fifo_cnt   <= '0;
