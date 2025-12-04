@@ -3,7 +3,6 @@
 //  Title      :  Edge-Detection design project - task 3.
 //             :
 //  Developers :  Roland Domján - s254360@student.dtu.dk
-//             :  YOUR NAME HERE - s??????@student.dtu.dk
 //             :
 //  Purpose    :  This design contains an entity for the accelerator that must be build
 //             :  in task three of the Edge Detection design project.
@@ -37,7 +36,7 @@ module acc #(
 );
 
     genvar i;
-    localparam WAIT_LENGTH = 5;                          // should be at least 2, and odd
+    localparam WAIT_LENGTH = 8;                          // should be at least 2, and odd
     localparam MAX_ADDR    = ((WIDTH * HEIGHT) / 4) - 1; // number of registers for 1 frame
     localparam ROW_WIDTH   = WIDTH / 4;                  // number of registers for 1 row
 
@@ -57,7 +56,7 @@ module acc #(
     state_t state, state_next;
 
     logic read_ready, read_ready_next;  // signals are ready to be inputted to alu - dataR(abc)
-    logic [2:0] read_ready_buf;         // 2-stage buffer: read_ready_next -> buf[0] -> buf[1] (read_ready)
+    logic [1:0] read_ready_buf;         // 2-stage buffer: read_ready_next -> buf[0] -> buf[1] (read_ready)
     logic [$clog2(WAIT_LENGTH)-1: 0] wait_cnt, wait_next;                  
     logic [$clog2(HEIGHT)   -1:0] row_cnt, row_next;
     logic [$clog2(ROW_WIDTH)-1:0] col_cnt, col_next;
@@ -124,10 +123,10 @@ module acc #(
       end else begin
         state          <= state_next;
         wait_cnt       <= wait_next;
-        read_ready_buf <= {read_ready_buf[1], read_ready_buf[0], read_ready_next };
+        read_ready_buf <= { read_ready_buf[0], read_ready_next };
       end
     end
-    assign read_ready = read_ready_buf[2];
+    assign read_ready = read_ready_buf[1];
 
 
     // input numbers to the alu
@@ -193,11 +192,11 @@ module acc #(
   
     // x derivative
     logic [39:0] x_der, x_der_next;
-    logic [49:0] x_der_pre_buff, x_der_pre_next;
+    logic [49:0] x_der_pre, x_der_pre_next;
 
-    assign x_der_pre_next[49:40] = x_der_pre_buff[9:0];
+    assign x_der_pre_next[49:40] = x_der_pre[9:0];
 
-    logic x_alus_ready, x_alus_ready_buf;
+    logic x_alus_ready;
 
     generate
     	for (i = 0; i < 4; i = i + 1) begin
@@ -215,31 +214,31 @@ module acc #(
    always_comb begin
         unique case ({col_cnt == 2, col_cnt == 1})
             2'b10: begin // left column
-                x_der_next[39:30] = abs_sub(x_der_pre_buff[29:20], x_der_pre_buff[39:30]);
-                x_der_next[29:20] = abs_sub(x_der_pre_buff[19:10], x_der_pre_buff[39:30]);
-                x_der_next[19:10] = abs_sub(x_der_pre_buff[ 9: 0], x_der_pre_buff[29:20]);
-                x_der_next[ 9: 0] = abs_sub(x_der_pre_next[39:30], x_der_pre_buff[19:10]);
+                x_der_next[39:30] = abs_sub(x_der_pre[29:20], x_der_pre[39:30]);
+                x_der_next[29:20] = abs_sub(x_der_pre[19:10], x_der_pre[39:30]);
+                x_der_next[19:10] = abs_sub(x_der_pre[ 9: 0], x_der_pre[29:20]);
+                x_der_next[ 9: 0] = abs_sub(x_der_pre_next[39:30], x_der_pre[19:10]);
             end
 
             2'b00: begin // middle
-                x_der_next[39:30] = abs_sub(x_der_pre_buff[29:20], x_der_pre_buff[49:40]);
-                x_der_next[29:20] = abs_sub(x_der_pre_buff[19:10], x_der_pre_buff[39:30]);
-                x_der_next[19:10] = abs_sub(x_der_pre_buff[ 9: 0], x_der_pre_buff[29:20]);
-                x_der_next[ 9: 0] = abs_sub(x_der_pre_next[39:30], x_der_pre_buff[19:10]);
+                x_der_next[39:30] = abs_sub(x_der_pre[29:20], x_der_pre[49:40]);
+                x_der_next[29:20] = abs_sub(x_der_pre[19:10], x_der_pre[39:30]);
+                x_der_next[19:10] = abs_sub(x_der_pre[ 9: 0], x_der_pre[29:20]);
+                x_der_next[ 9: 0] = abs_sub(x_der_pre_next[39:30], x_der_pre[19:10]);
             end
 
             2'b01: begin // right
-                x_der_next[39:30] = abs_sub(x_der_pre_buff[29:20], x_der_pre_buff[49:40]);
-                x_der_next[29:20] = abs_sub(x_der_pre_buff[19:10], x_der_pre_buff[39:30]);
-                x_der_next[19:10] = abs_sub(x_der_pre_buff[ 9: 0], x_der_pre_buff[29:20]);
-                x_der_next[ 9: 0] = abs_sub(x_der_pre_buff[ 9: 0], x_der_pre_buff[19:10]);
+                x_der_next[39:30] = abs_sub(x_der_pre[29:20], x_der_pre[49:40]);
+                x_der_next[29:20] = abs_sub(x_der_pre[19:10], x_der_pre[39:30]);
+                x_der_next[19:10] = abs_sub(x_der_pre[ 9: 0], x_der_pre[29:20]);
+                x_der_next[ 9: 0] = abs_sub(x_der_pre[ 9: 0], x_der_pre[19:10]);
             end
 
             default: begin
-                x_der_next[39:30] = abs_sub(x_der_pre_buff[29:20], x_der_pre_buff[49:40]);
-                x_der_next[29:20] = abs_sub(x_der_pre_buff[19:10], x_der_pre_buff[39:30]);
-                x_der_next[19:10] = abs_sub(x_der_pre_buff[ 9: 0], x_der_pre_buff[29:20]);
-                x_der_next[ 9: 0] = abs_sub(x_der_pre_next[39:30], x_der_pre_buff[19:10]);
+                x_der_next[39:30] = abs_sub(x_der_pre[29:20], x_der_pre[49:40]);
+                x_der_next[29:20] = abs_sub(x_der_pre[19:10], x_der_pre[39:30]);
+                x_der_next[19:10] = abs_sub(x_der_pre[ 9: 0], x_der_pre[29:20]);
+                x_der_next[ 9: 0] = abs_sub(x_der_pre_next[39:30], x_der_pre[19:10]);
             end
         endcase
     end
@@ -247,12 +246,12 @@ module acc #(
     always_ff @( posedge clk or posedge rst ) begin 
         if (rst) begin
             x_der            <= '0;
-            x_der_pre_buff   <= '0;
+            x_der_pre   <= '0;
             x_alus_ready     <= '0;
         end else begin    
             if (x_alus_ready) begin
                 x_der          <= x_der_next;
-                x_der_pre_buff <= x_der_pre_next;
+                x_der_pre <= x_der_pre_next;
             end
             x_alus_ready <= read_ready;
         end
@@ -370,7 +369,8 @@ module acc #(
 
             // saturate to 8 bits: if top 3 bits of the 11-bit sum are non-zero -> 255
             assign alu_out_next[8*(i+1)-1:8*i] =
-                (sum[11*i+10 : 11*i+8] == 3'b0) ? sum[11*i+7 : 11*i+0] : 8'd255;
+                sum[11*i+10 : 11*i+2];
+                // (sum[11*i+10 : 11*i+8] == 3'b0) ? sum[11*i+7 : 11*i+0] : 8'd255;
         end
     endgenerate
 

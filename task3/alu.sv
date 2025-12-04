@@ -21,22 +21,26 @@ module alu (
     input  logic [7:0] c,
     output logic [9:0] o
 );
-    logic [9:0] o_next;
+    logic [9:0] o_next, b_buf, b_next;
     logic [8:0] ac, ac_next;
 
     always_comb begin : COMP
-        // ac_next = a + c;
-        ac      = a + c;
-        o_next  = {b, 1'b0} + ac;
+        ac_next = a + c;
+        b_next  = b;
+        // ac      = a + c;
+        o_next  = {b_buf, 1'b0} + ac;
+        // o_next  = {b, 1'b0} + ac;
     end
 
     always_ff @(posedge clk or posedge rst) begin
         if (rst) begin
             o <= 10'b0;
-            // ac <= 9'b0;
+            ac <= 9'b0;
+            b_buf <= 8'b0;
         end else begin
             o <= o_next;
-            // ac <= ac_next;
+            ac <= ac_next;
+            b_buf <= b_next;
         end
     end
 endmodule
