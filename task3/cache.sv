@@ -156,7 +156,7 @@ module cache #(
     fifo # ()
     fifo_inst_a (
         .clk (clk),
-        .rst (rst || (addr_r_cnt > ( MAX_ADDR + ROW_WIDTH ))),
+        .rst (rst || (addr_w_cnt >= ( MAX_ADDR * 2 - 1 ))),
         .wen (fifo_w_en_a),
         .di  (fifo_b_out),      
         .ren (fifo_r_en_a),
@@ -166,7 +166,7 @@ module cache #(
     fifo # ()
     fifo_inst_b (
         .clk (clk),
-        .rst (rst || (addr_r_cnt > ( MAX_ADDR + ROW_WIDTH ))),
+        .rst (rst || (addr_w_cnt >= ( MAX_ADDR * 2 - 1 ))),
         .wen (fifo_w_en_b),
         .di  (mem_do_reorder_buf),
         .ren (fifo_r_en_b),
