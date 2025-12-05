@@ -16,7 +16,7 @@
 //------------------------------------------------------------------------------
 
 module clock #(
-    parameter time PERIOD = 50ns
+    parameter time PERIOD = 5ns
 ) (
     output logic clk,
     input  logic stop
