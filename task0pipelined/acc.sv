@@ -40,9 +40,14 @@ module acc (
     logic [31:0] data_in_cache, data_in_cache_next, data_out_cache, data_out_cache_next;
     logic writing;
 
-    assign dataW               = data_out_cache;
-    assign data_out_cache_next = {px4, px3, px2, px1};
     assign we                  = writing;
+    assign dataW               = data_out_cache;
+    assign data_out_cache_next = ~data_in_cache;
+    // assign data_out_cache_next = {px4, px3, px2, px1};
+    // assign px1 = 8'd255 - data_in_cache[7:0];
+    // assign px2 = 8'd255 - data_in_cache[15:8];
+    // assign px3 = 8'd255 - data_in_cache[23:16];
+    // assign px4 = 8'd255 - data_in_cache[31:24];
 
     always_comb begin : addressSelector
         if (writing) begin 
@@ -62,10 +67,6 @@ module acc (
 
         data_in_cache_next = data_in_cache;
 
-        px1 = 8'd255 - data_in_cache[7:0];
-        px2 = 8'd255 - data_in_cache[15:8];
-        px3 = 8'd255 - data_in_cache[23:16];
-        px4 = 8'd255 - data_in_cache[31:24];
 
         case (state) 
             INIT: begin

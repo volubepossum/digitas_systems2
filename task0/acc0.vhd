@@ -45,13 +45,14 @@ architecture rtl of acc is
   signal state, next_state       : state_type            := IDLE;
   constant MAX_ADDRESS           : unsigned(15 downto 0) := to_unsigned((352 * 288) / 4 - 1, 16);
   signal addr_reg, next_addr_reg : halfword_t            := (others => '0');
-begin process (all) begin next_state <= state;
-  next_addr_reg                        <= addr_reg;
-  addr                                 <= (others => 'Z');
-  dataw                                <= (others => 'Z');
-  en                                   <= '0';
-  we                                   <= '0';
-  finish                               <= '0';
+begin process (state, start, addr_reg, dataR) begin
+  next_state       <= state;
+  next_addr_reg    <= addr_reg;
+  addr             <= (others => 'Z');
+  dataW            <= (others => 'Z');
+  en               <= '0';
+  we               <= '0';
+  finish           <= '0';
   case state is
     when IDLE =>
       if start = '1' then
@@ -62,7 +63,7 @@ begin process (all) begin next_state <= state;
       addr             <= addr_reg;
     when WRITE => en <= '1';
       we               <= '1';
-      dataw            <= not datar;
+      dataW            <= not dataR;
       addr             <= std_logic_vector(unsigned(addr_reg) + MAX_ADDRESS + 1);
       if unsigned(addr_reg) = MAX_ADDRESS then
         next_state <= DONE;
