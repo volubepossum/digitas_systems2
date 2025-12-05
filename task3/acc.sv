@@ -169,32 +169,20 @@ module acc #(
     logic [31:0] alu_in_a_next, alu_in_b_next, alu_in_c_next;
 
     always_comb begin : ASSIGN_ALU
-        alu_in_a_next = alu_in_a;
-        alu_in_b_next = alu_in_b;
-        alu_in_c_next = alu_in_c;
+        alu_in_a_next = dataRa;
+        alu_in_b_next = dataRb;
+        alu_in_c_next = dataRc;
 
-        case ({row_cnt == 0, row_cnt == HEIGHT-1})
-            2'b10: begin // top row 
-                alu_in_a_next = dataRb;
-                alu_in_b_next = dataRb;
-                alu_in_c_next = dataRc;
-            end
-            2'b00: begin // middle rows 
-                alu_in_a_next = dataRa;
-                alu_in_b_next = dataRb;
-                alu_in_c_next = dataRc;    
-            end
-            2'b01: begin // bottom row 
-                alu_in_a_next = dataRa;
-                alu_in_b_next = dataRb;
-                alu_in_c_next = dataRb;
-            end
-            default: begin
-                alu_in_a_next = dataRa;
-                alu_in_b_next = dataRb;
-                alu_in_c_next = dataRc; 
-            end
-        endcase
+        if (row_cnt == 0) begin // top row 
+            alu_in_a_next = dataRb;
+            alu_in_b_next = dataRb;
+            alu_in_c_next = dataRc;
+        end else if (row_cnt == HEIGHT-1) begin // bottom row 
+            alu_in_a_next = dataRa;
+            alu_in_b_next = dataRb;
+            alu_in_c_next = dataRb;
+        end
+        // else: middle rows use default values (dataRa, dataRb, dataRc)
     end
 
     always_ff @( posedge clk or posedge rst ) begin 

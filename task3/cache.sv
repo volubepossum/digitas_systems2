@@ -33,6 +33,7 @@ module cache #(
     genvar i;
     localparam MAX_ADDR  = ((WIDTH * HEIGHT) / 4); // number of registers for 1 frame
     localparam ROW_WIDTH = WIDTH / 4;              // number of registers for 1 row
+    localparam FIFO_RST_DURATION = 5;
 
     logic [31:0] mem_do_reorder;
 
@@ -56,12 +57,32 @@ module cache #(
     logic fifo_w_en_b_delayed;  // Add delayed write enable
     logic [31:0] mem_do_reorder_buf;
 
+    logic [FIFO_RST_DURATION-1:0] fifo_rst_buff;
+    logic fifo_rst_held;
+
     assign mem_do_reorder = {mem_do[7:0], mem_do[15:8], mem_do[23:16], mem_do[31:24]};
     assign mem_di_next    = {di[7:0], di[15:8], di[23:16], di[31:24]};
     assign doc            = mem_do_reorder;
     assign row_cached     = addr_r_cnt > ROW_WIDTH - 1;
     assign two_row_cached = addr_r_cnt > (2 * ROW_WIDTH) - 1;
     assign fifo_w_en_a    = fifo_b_read_delay[1];
+
+    always_ff @(posedge clk) begin 
+        if ((addr_w_cnt >= ( MAX_ADDR * 2 - 1 )) ) fifo_rst_buff[FIFO_RST_DURATION-1] <= 1'b1;
+        else               fifo_rst_buff[FIFO_RST_DURATION-1] <= 1'b0;
+    end
+             
+    generate
+        for (i = 0; i < FIFO_RST_DURATION - 1; i = i + 1) begin
+            always_ff @(posedge clk) begin
+                if ((addr_w_cnt >= ( MAX_ADDR * 2 - 1 ))) fifo_rst_buff[i] <= 1'b1; 
+                else               fifo_rst_buff[i] <= fifo_rst_buff[i+1];
+            end
+        end
+    endgenerate
+
+    assign fifo_rst_held = fifo_rst_buff[0];
+
     always_comb begin : addressManagement
         read_ready_next = 1'b0;
         addr_r_next     = addr_r_cnt;
@@ -156,7 +177,7 @@ module cache #(
     fifo # ()
     fifo_inst_a (
         .clk (clk),
-        .rst (rst || (addr_w_cnt >= ( MAX_ADDR * 2 - 1 ))),
+        .rst (rst || fifo_rst_held),
         .wen (fifo_w_en_a),
         .di  (fifo_b_out),      
         .ren (fifo_r_en_a),
@@ -166,7 +187,7 @@ module cache #(
     fifo # ()
     fifo_inst_b (
         .clk (clk),
-        .rst (rst || (addr_w_cnt >= ( MAX_ADDR * 2 - 1 ))),
+        .rst (rst || fifo_rst_held),
         .wen (fifo_w_en_b),
         .di  (mem_do_reorder_buf),
         .ren (fifo_r_en_b),
