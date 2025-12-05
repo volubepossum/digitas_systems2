@@ -73,7 +73,7 @@ endfunction
 
 
 // Non-synthesizable single-port RAM for Accelerator. Supports reading/writing and dumping processed image to file.
-module memory1 #(
+module memorytest #(
     parameter string load_file_name = ""
 ) (
     input logic clk,         // Clock input

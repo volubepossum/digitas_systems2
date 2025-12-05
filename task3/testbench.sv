@@ -67,7 +67,7 @@ module testbench;
     );
 
     // Instantiate memory
-    memory1 #(.load_file_name(load_file_name)) Memory (
+    memorytest #(.load_file_name(load_file_name)) Memory (
         .clk(clk),
         .en(mem_ena),
         .we(mem_wea),

@@ -161,7 +161,7 @@ module top (
     );
 
     // Memory3 instance
-    memory3 #(.ADDR_WIDTH(16)) memory3_inst_0 (
+    memory #(.ADDR_WIDTH(16)) memory3_inst_0 (
         .clk(clk),
         .rst(rst_held),
         // Port a (accelerator)
