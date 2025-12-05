@@ -16,7 +16,8 @@ module top (
     output logic led,
     input  logic start,
     input  logic serial_tx,   // from the PC
-    output logic serial_rx    // to the PC
+    output logic serial_rx,   // to the PC
+    output logic rst_led
 );
     // Parameters
     // Clock: the clock will be 100MHz *  CLK_MULTIPLY_FACTOR / CLK_DIVISION_FACTOR.
@@ -71,6 +72,7 @@ module top (
     endgenerate
 
     assign rst_held = rst_buff[0];
+    assign rst_led = rst_held;
 
     // Clock divider instance
     clock_divider #(
@@ -175,5 +177,7 @@ module top (
         .dib(mem_dib),
         .dob(mem_dob)
     );
+
+
 
 endmodule

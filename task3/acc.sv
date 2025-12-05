@@ -18,28 +18,28 @@
 
 
 module acc #(
-    parameter WIDTH  = 352, // width of frame
-    parameter HEIGHT = 288 // height of frame
-    // parameter PX_REG = 4    // pixels per image
+    parameter WIDTH  = 352,          // width of frame
+    parameter HEIGHT = 288,          // height of frame
+    parameter MEMORY_DELAY = 3,  // pipeline stages for read_ready
+    parameter ALU_DELAY = 2        // pipeline stages for x_alus_ready
 ) (
-    input  logic        clk,        // The clock.
-    input  logic        rst,      // The rst signal. Active high.
-    input  logic [31:0] dataRa,     // The data bus (word_t).
-    input  logic [31:0] dataRb,     // The data bus (word_t).
-    input  logic [31:0] dataRc,     // The data bus (word_t).
-    output logic [31:0] dataW,      // The data bus (word_t).
-    output logic        en,         // Request signal for data.
-    output logic        we,         // Read/Write signal for data.
+    input  logic        clk,
+    input  logic        rst,
+    input  logic [31:0] dataRa,
+    input  logic [31:0] dataRb,
+    input  logic [31:0] dataRc,
+    output logic [31:0] dataW,
+    output logic        en,
+    output logic        we,
     input  logic        row_cached,
     input  logic        start,
     output logic        finish
 );
 
     genvar i;
-    localparam WAIT_LENGTH = 8;                          // should be at least 2, and odd
-    localparam MAX_ADDR    = ((WIDTH * HEIGHT) / 4) - 1; // number of registers for 1 frame
-    localparam ROW_WIDTH   = WIDTH / 4;                  // number of registers for 1 row
-
+    localparam WAIT_LENGTH = 8;
+    localparam MAX_ADDR    = ((WIDTH * HEIGHT) / 4) - 1;
+    localparam ROW_WIDTH   = WIDTH / 4;
 
     /////////
     // FSM //
@@ -51,13 +51,15 @@ module acc #(
         WRITE0,
         READ, 
         WRITE,
+        FLUSH,
         FIN
     } state_t;
 
     state_t state, state_next;
 
-    logic read_ready, read_ready_next;  // signals are ready to be inputted to alu - dataR(abc)
-    logic [1:0] read_ready_buf;         // 2-stage buffer: read_ready_next -> buf[0] -> buf[1] (read_ready)
+    logic read_ready, read_ready_next;
+    logic [MEMORY_DELAY-1:0] read_ready_buf;
+
     logic [$clog2(WAIT_LENGTH)-1: 0] wait_cnt, wait_next;                  
     logic [$clog2(HEIGHT)   -1:0] row_cnt, row_next;
     logic [$clog2(ROW_WIDTH)-1:0] col_cnt, col_next;
@@ -99,18 +101,30 @@ module acc #(
             WRITE0: begin
                 en = 1;
                 we = 1;
-                state_next = WRITE;
+                if (read_ready_buf[1]) state_next = WRITE0;
+                else            state_next = READ;
             end
             READ: begin
                 en = 1;
-                state_next = WRITE;
                 read_ready_next = 1;
+                if (row_cnt == HEIGHT - 1 && col_cnt == ROW_WIDTH -1) state_next = FLUSH;
+                else                                                  state_next = WRITE;
             end
             WRITE: begin
                 en = 1;
                 we = 1;
-                if (row_cnt == HEIGHT && col_cnt == ROW_WIDTH -1) state_next = FIN;
-                else                                              state_next = READ;
+                state_next = READ;
+            end
+            FLUSH: begin
+                en = 1;
+                we = read_ready;
+                read_ready_next = 1;
+                if (wait_cnt == WAIT_LENGTH - 1) begin
+                    state_next = FIN;
+                end else begin
+                    state_next = FLUSH;
+                    wait_next  = wait_cnt + read_ready;
+                end
             end
             FIN: begin
                 finish = 1'b1;
@@ -121,18 +135,33 @@ module acc #(
         endcase
     end
 
+    generate   
+        for (i = 0; i < MEMORY_DELAY-1; i = i + 1) begin
+            always_ff @(posedge clk or posedge rst) begin
+                if (rst) begin
+                    read_ready_buf[i] <= '0;
+                end else begin
+                    read_ready_buf[i] <= read_ready_buf[i+1];
+                end
+            end
+        end
+            always_ff @(posedge clk or posedge rst) begin
+                if (rst) read_ready_buf[MEMORY_DELAY-1] <= '0;
+                else     read_ready_buf[MEMORY_DELAY-1] <= read_ready_next;
+            end
+    endgenerate
+
+    assign read_ready = read_ready_buf[0];
+
     always_ff @(posedge clk or posedge rst) begin
-      if (rst) begin
-        state          <= INIT;
-        wait_cnt       <= '0;
-        read_ready_buf <= 2'b0;
-      end else begin
-        state          <= state_next;
-        wait_cnt       <= wait_next;
-        read_ready_buf <= { read_ready_buf[0], read_ready_next };
-      end
+        if (rst) begin
+            state    <= INIT;
+            wait_cnt <= '0;
+        end else begin
+            state    <= state_next;
+            wait_cnt <= wait_next;
+        end
     end
-    assign read_ready = read_ready_buf[1];
 
 
     // input numbers to the alu
@@ -173,7 +202,7 @@ module acc #(
             alu_in_a <= '0;
             alu_in_b <= '0;
             alu_in_c <= '0;
-        end else if (read_ready) begin
+        end else begin
             alu_in_a <= alu_in_a_next;
             alu_in_b <= alu_in_b_next;
             alu_in_c <= alu_in_c_next;
@@ -199,13 +228,15 @@ module acc #(
     // x derivative
     logic [39:0] x_der, x_der_next;
     logic [49:0] x_der_pre, x_der_pre_next;
-
+    // assign x_der = '0;
     assign x_der_pre_next[49:40] = x_der_pre[9:0];
 
     logic x_alus_ready;
-
+    logic [ALU_DELAY-1:0] x_alus_ready_buf;
+    logic [$clog2(ROW_WIDTH)-1:0] x_col_cnt;
+    logic [$clog2(ROW_WIDTH)*(ALU_DELAY+1)-1:0] x_col_cnt_buf;
     generate
-    	for (i = 0; i < 4; i = i + 1) begin
+        for (i = 0; i < 4; i = i + 1) begin
             alu # () alu_inst_x (
                 .clk(clk),
                 .rst(rst),
@@ -213,59 +244,79 @@ module acc #(
                 .b(alu_in_b[8*(i+1)-1:8*i]),
                 .c(alu_in_c[8*(i+1)-1:8*i]),
                 .o(x_der_pre_next[10*(i+1)-1:10*i])
-          );
-		end
+            );
+        end
     endgenerate
 
-   always_comb begin
-        unique case ({col_cnt == 2, col_cnt == 1})
-            2'b10: begin // left column
-                x_der_next[39:30] = abs_sub(x_der_pre[29:20], x_der_pre[39:30]);
-                x_der_next[29:20] = abs_sub(x_der_pre[19:10], x_der_pre[39:30]);
-                x_der_next[19:10] = abs_sub(x_der_pre[ 9: 0], x_der_pre[29:20]);
-                x_der_next[ 9: 0] = abs_sub(x_der_pre_next[39:30], x_der_pre[19:10]);
-            end
+    always_comb begin
+        // default: middle columns
+        x_der_next[39:30] = abs_sub(x_der_pre[29:20], x_der_pre[49:40]);
+        x_der_next[29:20] = abs_sub(x_der_pre[19:10], x_der_pre[39:30]);
+        x_der_next[19:10] = abs_sub(x_der_pre[ 9: 0], x_der_pre[29:20]);
+        x_der_next[ 9: 0] = abs_sub(x_der_pre_next[39:30], x_der_pre[19:10]);
 
-            2'b00: begin // middle
-                x_der_next[39:30] = abs_sub(x_der_pre[29:20], x_der_pre[49:40]);
-                x_der_next[29:20] = abs_sub(x_der_pre[19:10], x_der_pre[39:30]);
-                x_der_next[19:10] = abs_sub(x_der_pre[ 9: 0], x_der_pre[29:20]);
-                x_der_next[ 9: 0] = abs_sub(x_der_pre_next[39:30], x_der_pre[19:10]);
-            end
-
-            2'b01: begin // right
-                x_der_next[39:30] = abs_sub(x_der_pre[29:20], x_der_pre[49:40]);
-                x_der_next[29:20] = abs_sub(x_der_pre[19:10], x_der_pre[39:30]);
-                x_der_next[19:10] = abs_sub(x_der_pre[ 9: 0], x_der_pre[29:20]);
-                x_der_next[ 9: 0] = abs_sub(x_der_pre[ 9: 0], x_der_pre[19:10]);
-            end
-
-            default: begin
-                x_der_next[39:30] = abs_sub(x_der_pre[29:20], x_der_pre[49:40]);
-                x_der_next[29:20] = abs_sub(x_der_pre[19:10], x_der_pre[39:30]);
-                x_der_next[19:10] = abs_sub(x_der_pre[ 9: 0], x_der_pre[29:20]);
-                x_der_next[ 9: 0] = abs_sub(x_der_pre_next[39:30], x_der_pre[19:10]);
-            end
-        endcase
+        if (x_col_cnt == 0) begin
+            // left column: replicate leftmost pixel
+            x_der_next[39:30] = abs_sub(x_der_pre[29:20], x_der_pre[39:30]);
+            x_der_next[29:20] = abs_sub(x_der_pre[19:10], x_der_pre[39:30]);
+            x_der_next[19:10] = abs_sub(x_der_pre[ 9: 0], x_der_pre[29:20]);
+            x_der_next[ 9: 0] = abs_sub(x_der_pre_next[39:30], x_der_pre[19:10]);
+        end else if (x_col_cnt == ROW_WIDTH - 1) begin
+            // right column: replicate rightmost pixel
+            x_der_next[39:30] = abs_sub(x_der_pre[29:20], x_der_pre[49:40]);
+            x_der_next[29:20] = abs_sub(x_der_pre[19:10], x_der_pre[39:30]);
+            x_der_next[19:10] = abs_sub(x_der_pre[ 9: 0], x_der_pre[29:20]);
+            x_der_next[ 9: 0] = abs_sub(x_der_pre[ 9: 0], x_der_pre[19:10]);
+        end
     end
-    
-    always_ff @( posedge clk or posedge rst ) begin 
-        if (rst) begin
-            x_der            <= '0;
-            x_der_pre   <= '0;
-            x_alus_ready     <= '0;
-        end else begin    
-            if (x_alus_ready) begin
-                x_der          <= x_der_next;
-                x_der_pre <= x_der_pre_next;
+
+    generate   
+        for (i = 1; i < ALU_DELAY; i = i + 1) begin
+            always_ff @(posedge clk or posedge rst) begin
+                if (rst) begin
+                    x_alus_ready_buf[i-1] <= '0;
+                end else begin
+                    x_alus_ready_buf[i-1] <= x_alus_ready_buf[i];
+                end
             end
-            x_alus_ready <= read_ready;
+        end
+        for (i = 1; i < ALU_DELAY+1; i = i + 1) begin
+            always_ff @(posedge clk or posedge rst) begin
+                if (rst) begin
+                    x_col_cnt_buf[i*$clog2(ROW_WIDTH)-1: (i-1)*$clog2(ROW_WIDTH)] <= '0;
+                end else begin
+                    x_col_cnt_buf[i*$clog2(ROW_WIDTH)-1: (i-1)*$clog2(ROW_WIDTH)] <= x_col_cnt_buf[(i+1)*$clog2(ROW_WIDTH)-1: i*$clog2(ROW_WIDTH)];
+                end
+            end
+        end
+        always_ff @(posedge clk or posedge rst) begin
+            if (rst) begin
+                x_alus_ready_buf[ALU_DELAY-1] <= '0;
+                x_col_cnt_buf[(ALU_DELAY+1)*$clog2(ROW_WIDTH) - 1: (ALU_DELAY)*$clog2(ROW_WIDTH)] <= '0;
+            end else if (read_ready) begin
+                x_alus_ready_buf[ALU_DELAY-1] <= 1'b1;
+                x_col_cnt_buf[(ALU_DELAY+1)*$clog2(ROW_WIDTH) - 1: (ALU_DELAY)*$clog2(ROW_WIDTH)] <= col_cnt;
+            end else begin
+                x_alus_ready_buf[ALU_DELAY-1] <= 1'b0;
+            end
+        end
+    endgenerate
+
+    assign x_alus_ready = x_alus_ready_buf[0];
+    assign x_col_cnt    = x_col_cnt_buf[$clog2(ROW_WIDTH)-1:0];
+
+    always_ff @(posedge clk or posedge rst) begin 
+        if (rst) begin
+            x_der     <= '0;
+            x_der_pre <= '0;
+        end else if (x_alus_ready) begin
+            x_der_pre <= x_der_pre_next;
+            x_der     <= x_der_next;
         end
     end
 
     // y derivative
     logic [39:0] y_der, y_der_next;
-    // top (from in a) / bot (from in c) merged into one block to avoid duplication
     logic [39:0] y_alu_in_top_buff, y_alu_in_top_next;
     logic [47:0] y_alu_in_top;
     logic [39:0] y_der_pre_top;
@@ -273,46 +324,52 @@ module acc #(
     logic [39:0] y_alu_in_bot_buff, y_alu_in_bot_next;
     logic [47:0] y_alu_in_bot;
     logic [39:0] y_der_pre_bot;
+
+    // Add column count delay for y-derivative
+    logic [$clog2(ROW_WIDTH)-1:0] y_col_cnt;
+
+    always_ff @(posedge clk or posedge rst) begin
+        if (rst) begin
+            y_col_cnt <= '0;
+        end else if (read_ready) begin
+            y_col_cnt <= col_cnt;
+        end
+    end
+
     always_comb begin
         // prepare next words
-
         y_alu_in_top_next[39:32] = y_alu_in_top_buff[7:0];
         y_alu_in_top_next[31: 0] = alu_in_a;
         y_alu_in_bot_next[39:32] = y_alu_in_bot_buff[7:0];
         y_alu_in_bot_next[31: 0] = alu_in_c;
 
-        unique case ({col_cnt == 1, col_cnt == 0})
-            2'b10: begin // left column: replicate leftmost byte
-                y_alu_in_top = {
-                    y_alu_in_top_buff[31:24],
-                    y_alu_in_top_buff[31: 0],
-                    y_alu_in_top_next[31:24]
-                };
-                y_alu_in_bot = {
-                    y_alu_in_bot_buff[31:24],
-                    y_alu_in_bot_buff[31: 0],
-                    y_alu_in_bot_next[31:24]
-                };
-            end
-            2'b00: begin // middle
-                y_alu_in_top = { y_alu_in_top_buff, y_alu_in_top_next[31:24] };
-                y_alu_in_bot = { y_alu_in_bot_buff, y_alu_in_bot_next[31:24] };
-            end
-            2'b01: begin // right column: replicate rightmost byte
-                y_alu_in_top = {
-                    y_alu_in_top_buff,
-                    y_alu_in_top_buff[ 7: 0]
-                };
-                y_alu_in_bot = {
-                    y_alu_in_bot_buff,
-                    y_alu_in_bot_buff[ 7: 0]
-                };
-            end
-            default: begin
-                y_alu_in_top = { y_alu_in_top_buff, y_alu_in_top_next[31:24] };
-                y_alu_in_bot = { y_alu_in_bot_buff, y_alu_in_bot_next[31:24] };
-            end
-        endcase
+        // default: middle columns
+        y_alu_in_top = { y_alu_in_top_buff, y_alu_in_top_next[31:24] };
+        y_alu_in_bot = { y_alu_in_bot_buff, y_alu_in_bot_next[31:24] };
+
+        if (y_col_cnt == 0) begin 
+            // left column: replicate leftmost byte
+            y_alu_in_top = {
+                y_alu_in_top_buff[31:24],
+                y_alu_in_top_buff[31: 0],
+                y_alu_in_top_next[31:24]
+            };
+            y_alu_in_bot = {
+                y_alu_in_bot_buff[31:24],
+                y_alu_in_bot_buff[31: 0],
+                y_alu_in_bot_next[31:24]
+            };
+        end else if (y_col_cnt == ROW_WIDTH - 1) begin 
+            // right column: replicate rightmost byte
+            y_alu_in_top = {
+                y_alu_in_top_buff,
+                y_alu_in_top_buff[ 7: 0]
+            };
+            y_alu_in_bot = {
+                y_alu_in_bot_buff,
+                y_alu_in_bot_buff[ 7: 0]
+            };
+        end
     end
     
     generate
